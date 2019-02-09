@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Simple venngraph.js example</title>
+    </head>
+    <body>
+        <div id="venn"></div>
+    </body>
+
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="../venn.js"></script>
+    <script src="../venngraph.js"></script>
+    <script>
+        // define sets, nodes and edges.
+        var nodes = [ {group: 'A', name: 'n1'},
+                      {group: 'A', name: 'n2'},
+                      {group: 'A__B', name: 'n3'},
+                      {group: 'A', name: 'n4'},
+                      {group: 'B', name: 'n5'},
+                      {group: 'A__B', name: 'n6'},
+                      {group: 'C', name: 'n7'},
+                      {group: 'C', name: 'n8'},
+                      {group: 'A__B__C', name: 'n9'} ];
+        var edges = [ {source: 'n1', target: 'n2'}, 
+                      {source: 'n1', target: 'n3'}, 
+                      {source: 'n1', target: 'n4'}, 
+                      {source: 'n1', target: 'n6'}, 
+                      {source: 'n2', target: 'n3'}, 
+                      {source: 'n2', target: 'n5'}, 
+                      {source: 'n2', target: 'n6'}, 
+                      {source: 'n3', target: 'n6'}, 
+                      {source: 'n3', target: 'n9'}, 
+                      {source: 'n5', target: 'n6'}, 
+                      {source: 'n5', target: 'n8'}, 
+                      {source: 'n6', target: 'n9'}, 
+                      {source: 'n7', target: 'n8'}, 
+                      {source: 'n7', target: 'n9'} ];
+        var div = d3.select("#venn");
+        var vg = vennGraph(div).width(600).height(500)
+                 .setNodes(nodes).setEdges(edges).prepare();
+        var edge_data = vg.vennEdge(div.datum(edges));    // draw edge first
+        var node_data = vg.vennNode(div.datum(nodes));
+    </script>
+</html>
