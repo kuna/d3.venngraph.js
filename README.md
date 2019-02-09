@@ -18,6 +18,7 @@ var edges = [
     {source: 'n1', target: 'n2'},   // undirected edge information, which indicates connection between edge n1 and n2.
     ...
 ];
+var div = d3.select("#venn");
 var vg = vennGraph(div).width(600).height(500).setNodes(nodes).setEdges(edges).prepare();
 ```
 
