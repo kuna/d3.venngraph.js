@@ -77,12 +77,12 @@ var vennGraph = function(selection, clr)
   var vennData = null;
   var nodes = [];
   var edges = [];
-  var nodes_meta = [];
-  var edges_meta = [];
+  var nodes_pos = [];
+  var edges_pos = [];
   var group_count = {};
   var circles = {};
   var exports = this;
-  var svg = selection.select('svg');
+  var svg = null;
 
   // nelderMead method
   // f: loss function
@@ -253,12 +253,11 @@ var vennGraph = function(selection, clr)
     var dist_neighbor = 0;
     for (var _=0; _<nodes.length; _++)
     {
-      var n = nodes[_];
-      var nm = nodes_meta[_];
+      var np = nodes_pos[_];
       var i,x=0;
-      for (i=0; i<nm.neighbors.length && i<parameters.maxNeighbors; i++)
+      for (i=0; i<np.neighbors.length && i<parameters.maxNeighbors; i++)
       {
-        x += dist_from_idx(nm.neighbors[i].idx, n.idx);
+        x += dist_from_idx(np.neighbors[i].idx, np.idx);
       }
       if (i > 0) x /= i;
       dist_neighbor += x;
@@ -267,7 +266,8 @@ var vennGraph = function(selection, clr)
     var dist_nearby = 0;
     for (var _=0; _<nodes.length; _++)
     {
-      var n = nodes[_];
+      var np = nodes_pos[_];
+      var n = np.node;
       var i,x = 0;
       for (i=0; i<circles[n.group].nodes.length && i<parameters.maxNeighbors; i++)
       {
@@ -346,6 +346,7 @@ var vennGraph = function(selection, clr)
     }
     vennChart = venn.VennDiagram().width(parameters.width).height(parameters.height).colours(clr);
     vennData = vennChart(selection.datum(grouplist));
+    svg = selection.select('svg');  // fetch svg after vennChart
     setCircle(vennData.circles);
 
     console.log('calculating position of nodes. please wait ...');
@@ -359,18 +360,22 @@ var vennGraph = function(selection, clr)
     }
 
     // prepare neighbor information of node / edge
-    nodes_meta = [];
-    edges_meta = [];
+    nodes_pos = [];
+    edges_pos = [];
     var nodedict = {};
     for (var i=0; i<nodes.length; i++)
     {
+      var centre = circles[nodes[i].group];
+      var ang_rand = Math.random() * 2 * Math.PI;
+      var rad_rand = centre.radius * Math.random() * 0.9;
       var nm = {
         node: nodes[i],
         neighbors: [],
-        x: 0,
-        y: 0
+        x: centre.x + r * Math.cos(ang),
+        y: centre.x + r * Math.cos(ang),
+        idx: i
       };
-      nodes_meta.push(nm);
+      nodes_pos.push(nm);
       nodedict[nodes[i].name] = nm;
     }
     for (var i=0; i<edges.length; i++)
@@ -378,18 +383,18 @@ var vennGraph = function(selection, clr)
       if (!(edges[i].source in nodedict)) throw("edge source '" + edges[i].source + "' is not in node!");
       if (!(edges[i].target in nodedict)) throw("edge target '" + edges[i].target + "' is not in node!");
       var cur_edge = {
+        edge: edges[i],
         nsource: nodedict[edges[i].source],
-        ntarget: nodedict[edges[i].target]
+        ntarget: nodedict[edges[i].target],
+        x1:0, y1:0, x2:0, y2:0
       };
       cur_edge.nsource.neighbors.push(cur_edge.ntarget);
       cur_edge.ntarget.neighbors.push(cur_edge.nsource);
-      edges_meta.push(cur_edge);
+      edges_pos.push(cur_edge);
     }    
 
     // serialize node position to vector before nelderMead method
-    var initial = make_solution_vector(nodes);
-    console.log(initial);
-
+    var initial = make_solution_vector(nodes_pos);
     // Original nelderMead
     // - do gradient all of the node's position, based on nelderMead method
     var solution = nelderMead(
@@ -397,11 +402,18 @@ var vennGraph = function(selection, clr)
         return loss_from_vector(values, circles);
      }, 
     initial, parameters);
-    console.log(solution);
-
     if (isNaN(solution.fx))
       console.warn("warning: nelderMead may failed to find proper position for nodes.");
-    fill_from_solution(nodes, solution.x);
+
+    // update node / edge pos
+    fill_from_solution(nodes_pos, solution.x);
+    for (var i=0; i<edges_pos.length; i++)
+    {
+      edges_pos[i].x1 = edges_pos[i].nsource.x;
+      edges_pos[i].y1 = edges_pos[i].nsource.y;
+      edges_pos[i].x2 = edges_pos[i].ntarget.x;
+      edges_pos[i].y2 = edges_pos[i].ntarget.y;
+    }
 
     return exports;
   }
@@ -411,25 +423,25 @@ var vennGraph = function(selection, clr)
     //fill_from_solution(nodes, initial);
     // place nodes
     var enter = svg.append('g')
-      .attr('class', 'venn-nodes').selectAll('circle').data(nodes_meta)
+      .attr('class', 'venn-nodes').selectAll('circle').data(nodes_pos)
       .enter()
       .append('circle')
       .attr('r', '2px')
       .attr('cx', function(d) { return d.x; })
       .attr('cy', function(d) { return d.y; })
-      .style("fill", function (d) { 
-			  return clr(d.group);
+      .style("fill", function (d) {
+			  return clr(d.node.group);
 		  });
 
     var entertext = svg.append('g')
-      .attr('class', 'venn-nodes-text').selectAll('text').data(nodes_meta)
+      .attr('class', 'venn-nodes-text').selectAll('text').data(nodes_pos)
       .enter()
       .append('text')
       .attr('x', function(d) { return d.x+2; })
       .attr('y', function(d) { return d.y+3; })
-      .text(function(d) { return d.name; });
+      .text(function(d) { return d.node.name; });
     
-    return {'nodes': nodes_meta,
+    return {'nodes': nodes_pos,
       'enter': enter,
       'entertext': entertext
       };
@@ -438,10 +450,8 @@ var vennGraph = function(selection, clr)
   function vennEdge()
   {
     // use nsource, ntarget attributes
-    console.log(edges);
-    console.log(edges_meta);
     var enter = svg.append('g')
-      .attr('class', 'venn-edges').selectAll('line').data(edges_meta)
+      .attr('class', 'venn-edges').selectAll('line').data(edges_pos)
       .enter()
       .append('line')
       .attr('x1', function (d) { return d.nsource.x; })
@@ -449,7 +459,7 @@ var vennGraph = function(selection, clr)
       .attr('x2', function (d) { return d.ntarget.x; })
       .attr('y2', function (d) { return d.ntarget.y; });
     return {
-      'edges': edges_meta,
+      'edges': edges_pos,
       'enter': enter
     };
   }
